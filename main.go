@@ -48,14 +48,14 @@ func main() {
 	target := 0.999
 	loops := 6
 
-	original := convertToGray(readImage("original.jpg")) // or a webp
+	original := readImage("original.jpg") // or a webp
 	originalSize, err := getFilesize("original.jpg")
+	originalGray := convertToGray(original)
 	if err != nil {
 		panic(err)
 	}
 	fmt.Printf("Original Size = %.2fKB\n", float32(originalSize)/1024)
 
-	var bestImg []byte
 	var bestSize = originalSize
 	var bestQ float32
 	var bestIndex float64
@@ -67,7 +67,7 @@ func main() {
 			// fmt.Println("Tried all qualities")
 			break
 		}
-		idx, data, err := compare(original, q)
+		idx, data, err := compare(originalGray, q)
 		index = idx
 		if err != nil {
 			panic("Error when comparing images")
@@ -93,17 +93,20 @@ func main() {
 			}
 		}
 		if newSize < bestSize && index >= target {
-			bestImg = data
 			bestSize = newSize
 			bestQ = q
 			bestIndex = index
 		}
 	}
 
-	if len(bestImg) > 0 {
+	if bestSize < originalSize {
+		data, err := webp.EncodeRGB(original, bestQ)
+		if err != nil {
+			panic(err)
+		}
+		save("output.webp", data)
 		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", int(bestQ), bestIndex, float32(bestSize)/1024)
 		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(bestSize)/float32(originalSize)*100, float32(originalSize-bestSize)/1024)
-		save("output.webp", bestImg)
 	} else {
 		fmt.Println("No new image")
 	}
