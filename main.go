@@ -59,20 +59,20 @@ func main() {
 	var bestSize = originalSize
 	var bestQ float32
 	var bestIndex float64
-	var newSize int64
-	var index float64
+	var fallbackQ float32
+	var fallbackSize int64
+	var fallbackIndex float64
 	for attempt := 1; attempt <= loops; attempt++ {
 		var q = minQ + (maxQ-minQ)/2
 		if minQ == maxQ {
 			// fmt.Println("Tried all qualities")
 			break
 		}
-		idx, data, err := compare(originalGray, q)
-		index = idx
+		index, data, err := compare(originalGray, q)
 		if err != nil {
 			panic("Error when comparing images")
 		}
-		newSize = int64(len(data))
+		newSize := int64(len(data))
 		fmt.Printf("[%v] Quality = %v, SSIM = %.5f, Size = %.2fKB\n", attempt, int(q), index, float32(newSize)/1024)
 
 		if newSize >= originalSize {
@@ -97,6 +97,15 @@ func main() {
 			bestQ = q
 			bestIndex = index
 		}
+		// fallback
+		if fallbackSize == 0 {
+			fallbackSize = newSize
+		}
+		if newSize > fallbackSize && newSize <= originalSize {
+			fallbackSize = newSize
+			fallbackQ = q
+			fallbackIndex = index
+		}
 	}
 
 	if bestSize < originalSize {
@@ -108,6 +117,13 @@ func main() {
 		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", int(bestQ), bestIndex, float32(bestSize)/1024)
 		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(bestSize)/float32(originalSize)*100, float32(originalSize-bestSize)/1024)
 	} else {
-		fmt.Println("No new image")
+		data, err := webp.EncodeRGB(original, fallbackQ)
+		if err != nil {
+			panic(err)
+		}
+		save("output.webp", data)
+		fmt.Println("* Can't find target SSIM, falling back to closest match")
+		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", int(fallbackQ), fallbackIndex, float32(fallbackSize)/1024)
+		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(fallbackSize)/float32(originalSize)*100, float32(originalSize-fallbackSize)/1024)
 	}
 }
