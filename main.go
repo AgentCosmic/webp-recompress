@@ -101,7 +101,13 @@ func main() {
 		if fallbackSize == 0 {
 			fallbackSize = newSize
 		}
-		if newSize > fallbackSize && newSize <= originalSize {
+		if newSize <= originalSize && newSize > fallbackSize {
+			// when it's smaller than original we find the biggest
+			fallbackSize = newSize
+			fallbackQ = q
+			fallbackIndex = index
+		} else if newSize > originalSize && newSize < fallbackSize {
+			// when it's bigger than ooriginal we find the smallest
 			fallbackSize = newSize
 			fallbackQ = q
 			fallbackIndex = index
