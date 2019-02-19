@@ -1,3 +1,5 @@
+github.com/AgentCosmic/webp v1.0.1-0.20190219092338-d2b2dd74ab1d h1:1RFl1Vp6uajlBoyjOb0KmMVCVnqy96kztjpKWwsGh00=
+github.com/AgentCosmic/webp v1.0.1-0.20190219092338-d2b2dd74ab1d/go.mod h1:dnoT2fOpIU7vBzJm6zeI14PkaycIwF5WufJOoNSEypU=
 github.com/chai2010/webp v1.0.0 h1:64IosJhW2aYYWvqZiexusoDQFTSfzcJA7DU6na7RKHM=
 github.com/chai2010/webp v1.0.0/go.mod h1:LP12PG5IFmLGHUU26tBiCBKnghxx3toZFwDjOYvd3Ow=
 golang.org/x/image v0.0.0-20190209060608-ef4a1470e0dc h1:P8UBp9iv2ZY5xjf9rnwI9s/hywlCgyKzpLsfk30IVyw=

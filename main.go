@@ -85,7 +85,7 @@ func checkArgs(src string, dest string, force bool, max int, min int, target flo
 		msg = "Source image '" + src + "' does not exists."
 	}
 	if !force {
-		if _, err := os.Stat(dest); os.IsExist(err) {
+		if _, err := os.Stat(dest); err == nil {
 			msg = "Destiation path '" + dest + "' already exists. Use -f to overwrite."
 		}
 	}
@@ -107,7 +107,7 @@ func checkArgs(src string, dest string, force bool, max int, min int, target flo
 	if msg == "" {
 		return true
 	}
-	fmt.Println("* Error: " + msg)
+	fmt.Fprintln(os.Stderr, "* Error: "+msg+"\n")
 	return false
 }
 
@@ -116,21 +116,34 @@ func main() {
 	var minQ int
 	var target float64
 	var loops int
-	var force bool
 	var help bool
 	flag.IntVar(&maxQ, "max", 95, "Maximum quality")
 	flag.IntVar(&minQ, "min", 40, "Minimum quality")
-	flag.Float64Var(&target, "t", 0.999, "Target minimum SSIM")
-	flag.IntVar(&loops, "l", 6, "Numer of tries")
-	flag.BoolVar(&force, "f", false, "Whether to overwrite the output image if it already exists")
+	flag.Float64Var(&target, "t", 0.999, "Set the target SSIM")
+	flag.IntVar(&loops, "l", 6, "Maximum number of attempts to find the best quality")
 	flag.BoolVar(&help, "h", false, "Print this help message")
+	flag.Bool("f", false, "Overwrite the output image if it already exists")
+	flag.Bool("c", false, "Disable copying files that will not be compressed")
 	flag.Parse()
 	src := flag.Arg(0)
 	dest := flag.Arg(1)
+	var force = false
+	var noCopy = false
+	for _, n := range os.Args {
+		if n == "-f" {
+			force = true
+		} else if n == "-c" {
+			noCopy = true
+		}
+	}
 
 	// check args
 	flag.Usage = func() {
-		fmt.Fprintf(os.Stderr, "Usage: ./webpre src dest [options]\n")
+		fmt.Fprintln(os.Stderr, "Usage: ./webpre src dest [options]")
+		fmt.Fprintln(os.Stderr, "All metadata will be lost during this process")
+		fmt.Fprintln(os.Stderr, "If no match is found, the original webp image will be copied over, otherwise it will use the quality that produces the lowest and closest size to the original")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "Options:")
 		flag.PrintDefaults()
 	}
 	if help {
@@ -171,7 +184,7 @@ func main() {
 
 		if newSize >= originalSize {
 			if index < target {
-				fmt.Println("* Cannot achieve target SSIM by compressing further")
+				// fmt.Println("* Cannot achieve target SSIM by compressing further")
 				attempt = loops
 			} else {
 				maxQ = int(math.Max(float64(q-1), float64(minQ)))
@@ -182,7 +195,7 @@ func main() {
 			} else if index > target {
 				maxQ = int(math.Max(float64(q-1), float64(minQ)))
 			} else {
-				fmt.Println("Found perfect compression")
+				// fmt.Println("Found perfect compression")
 				attempt = loops
 			}
 		}
@@ -217,14 +230,18 @@ func main() {
 		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", bestQ, bestIndex, float32(bestSize)/1024)
 		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(bestSize)/float32(originalSize)*100, float32(originalSize-bestSize)/1024)
 	} else {
+		if noCopy {
+			fmt.Println("* Can't find any match, not saving any image")
+			return
+		}
 		if isWebp(src) {
-			fmt.Println("* Can't find target SSIM, copying oringal image")
+			fmt.Println("* Can't find any match, copying oringal image")
 			_, err := copyFile(src, dest)
 			if err != nil {
 				panic(err)
 			}
 		} else {
-			fmt.Println("* Can't find target SSIM, falling back to closest match")
+			fmt.Println("* Can't find any match, falling back to closest match")
 			fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", fallbackQ, fallbackIndex, float32(fallbackSize)/1024)
 			fmt.Printf("%.1f%% of original, saved %.2fKB", float32(fallbackSize)/float32(originalSize)*100, float32(originalSize-fallbackSize)/1024)
 			data, err := webp.EncodeRGB(original, float32(fallbackQ))
