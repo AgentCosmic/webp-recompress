@@ -4,12 +4,32 @@ import (
 	"flag"
 	"fmt"
 	"image"
+	"io"
 	"log"
 	"math"
+	"net/http"
 	"os"
 
 	"github.com/chai2010/webp"
 )
+
+func isWebp(path string) bool {
+	f, err := os.Open(path)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+	// Get the content
+	buffer := make([]byte, 512)
+	_, err = f.Read(buffer)
+	if err != nil {
+		return false
+	}
+	// Use the net/http package's handy DectectContentType function. Always returns a valid
+	// content-type by returning "application/octet-stream" if no others seemed to match.
+	contentType := http.DetectContentType(buffer)
+	return contentType == "image/webp"
+}
 
 func getFilesize(path string) (size int64, err error) {
 	fi, err := os.Stat(path)
@@ -41,6 +61,22 @@ func save(p string, data []byte) (err error) {
 	defer f.Close()
 	f.Write(data)
 	return
+}
+
+func copyFile(src string, dest string) (nBytes int64, err error) {
+	source, err := os.Open(src)
+	if err != nil {
+		return 0, err
+	}
+	defer source.Close()
+
+	destination, err := os.Create(dest)
+	if err != nil {
+		return 0, err
+	}
+	defer destination.Close()
+	nBytes, err = io.Copy(destination, source)
+	return nBytes, err
 }
 
 func checkArgs(src string, dest string, force bool, max int, min int, target float64, loops int) bool {
@@ -181,13 +217,21 @@ func main() {
 		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", bestQ, bestIndex, float32(bestSize)/1024)
 		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(bestSize)/float32(originalSize)*100, float32(originalSize-bestSize)/1024)
 	} else {
-		data, err := webp.EncodeRGB(original, float32(fallbackQ))
-		if err != nil {
-			panic(err)
+		if isWebp(src) {
+			fmt.Println("* Can't find target SSIM, copying oringal image")
+			_, err := copyFile(src, dest)
+			if err != nil {
+				panic(err)
+			}
+		} else {
+			fmt.Println("* Can't find target SSIM, falling back to closest match")
+			fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", fallbackQ, fallbackIndex, float32(fallbackSize)/1024)
+			fmt.Printf("%.1f%% of original, saved %.2fKB", float32(fallbackSize)/float32(originalSize)*100, float32(originalSize-fallbackSize)/1024)
+			data, err := webp.EncodeRGB(original, float32(fallbackQ))
+			if err != nil {
+				panic(err)
+			}
+			save(dest, data)
 		}
-		save(dest, data)
-		fmt.Println("* Can't find target SSIM, falling back to closest match")
-		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", fallbackQ, fallbackIndex, float32(fallbackSize)/1024)
-		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(fallbackSize)/float32(originalSize)*100, float32(originalSize-fallbackSize)/1024)
 	}
 }

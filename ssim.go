@@ -6,10 +6,13 @@ import (
 	"errors"
 	"image"
 	"image/color"
-	"image/jpeg"
+	_ "image/jpeg"
+	_ "image/png"
 	"log"
 	"math"
 	"os"
+
+	_ "golang.org/x/image/webp"
 )
 
 // Default SSIM constants
@@ -56,16 +59,6 @@ func convertToGray(originalImg image.Image) image.Image {
 	}
 
 	return grayImg
-}
-
-// Write an image.Image to a jpg file of quality 100
-func writeImage(img image.Image, path string) {
-	w, err := os.Create(path + ".jpg")
-	handleError(err)
-	defer w.Close()
-
-	quality := jpeg.Options{Quality: 100}
-	jpeg.Encode(w, img, &quality)
 }
 
 // Convert uint32 R value to a float. The returnng
