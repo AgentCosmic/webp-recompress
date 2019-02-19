@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"image"
 	"log"
@@ -19,8 +20,8 @@ func getFilesize(path string) (size int64, err error) {
 	return
 }
 
-func compare(original image.Image, quality float32) (index float64, raw []byte, err error) {
-	raw, err = webp.EncodeRGB(original, quality)
+func compare(original image.Image, quality int) (index float64, raw []byte, err error) {
+	raw, err = webp.EncodeRGB(original, float32(quality))
 	if err != nil {
 		return
 	}
@@ -42,14 +43,71 @@ func save(p string, data []byte) (err error) {
 	return
 }
 
-func main() {
-	var maxQ float32 = 95
-	var minQ float32 = 40
-	target := 0.999
-	loops := 6
+func checkArgs(src string, dest string, force bool, max int, min int, target float64, loops int) bool {
+	var msg string
+	if _, err := os.Stat(src); os.IsNotExist(err) {
+		msg = "Source image '" + src + "' does not exists."
+	}
+	if !force {
+		if _, err := os.Stat(dest); os.IsExist(err) {
+			msg = "Destiation path '" + dest + "' already exists. Use -f to overwrite."
+		}
+	}
+	if dest == "" {
+		msg = "Please specify a destination path"
+	}
+	if max < 1 || max > 100 {
+		msg = "Maximum quality has to be between 1 and 100."
+	}
+	if min < 0 || min > 99 {
+		msg = "Minimum quality has to be between 0 and 99."
+	}
+	if target <= 0 || target > 1 {
+		msg = "Target has to be between 0 and 99."
+	}
+	if loops <= 0 {
+		msg = "Loops has to be more than 0"
+	}
+	if msg == "" {
+		return true
+	}
+	fmt.Println("* Error: " + msg)
+	return false
+}
 
-	original := readImage("original.jpg") // or a webp
-	originalSize, err := getFilesize("original.jpg")
+func main() {
+	var maxQ int
+	var minQ int
+	var target float64
+	var loops int
+	var force bool
+	var help bool
+	flag.IntVar(&maxQ, "max", 95, "Maximum quality")
+	flag.IntVar(&minQ, "min", 40, "Minimum quality")
+	flag.Float64Var(&target, "t", 0.999, "Target minimum SSIM")
+	flag.IntVar(&loops, "l", 6, "Numer of tries")
+	flag.BoolVar(&force, "f", false, "Whether to overwrite the output image if it already exists")
+	flag.BoolVar(&help, "h", false, "Print this help message")
+	flag.Parse()
+	src := flag.Arg(0)
+	dest := flag.Arg(1)
+
+	// check args
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, "Usage: ./webpre src dest [options]\n")
+		flag.PrintDefaults()
+	}
+	if help {
+		flag.Usage()
+		return
+	}
+	if !checkArgs(src, dest, force, maxQ, minQ, target, loops) {
+		flag.Usage()
+		os.Exit(1)
+	}
+
+	original := readImage(src) // or a webp
+	originalSize, err := getFilesize(src)
 	originalGray := convertToGray(original)
 	if err != nil {
 		panic(err)
@@ -57,9 +115,9 @@ func main() {
 	fmt.Printf("Original Size = %.2fKB\n", float32(originalSize)/1024)
 
 	var bestSize = originalSize
-	var bestQ float32
+	var bestQ int
 	var bestIndex float64
-	var fallbackQ float32
+	var fallbackQ int
 	var fallbackSize int64
 	var fallbackIndex float64
 	for attempt := 1; attempt <= loops; attempt++ {
@@ -73,20 +131,20 @@ func main() {
 			panic("Error when comparing images")
 		}
 		newSize := int64(len(data))
-		fmt.Printf("[%v] Quality = %v, SSIM = %.5f, Size = %.2fKB\n", attempt, int(q), index, float32(newSize)/1024)
+		fmt.Printf("[%v] Quality = %v, SSIM = %.5f, Size = %.2fKB\n", attempt, q, index, float32(newSize)/1024)
 
 		if newSize >= originalSize {
 			if index < target {
-				fmt.Println("Cannot compress further")
-				break
+				fmt.Println("* Cannot achieve target SSIM by compressing further")
+				attempt = loops
 			} else {
-				maxQ = float32(math.Max(float64(q-1), float64(minQ)))
+				maxQ = int(math.Max(float64(q-1), float64(minQ)))
 			}
 		} else {
 			if index < target {
-				minQ = float32(math.Min(float64(q+1), float64(maxQ)))
+				minQ = int(math.Min(float64(q+1), float64(maxQ)))
 			} else if index > target {
-				maxQ = float32(math.Max(float64(q-1), float64(minQ)))
+				maxQ = int(math.Max(float64(q-1), float64(minQ)))
 			} else {
 				fmt.Println("Found perfect compression")
 				attempt = loops
@@ -115,21 +173,21 @@ func main() {
 	}
 
 	if bestSize < originalSize {
-		data, err := webp.EncodeRGB(original, bestQ)
+		data, err := webp.EncodeRGB(original, float32(bestQ))
 		if err != nil {
 			panic(err)
 		}
-		save("output.webp", data)
-		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", int(bestQ), bestIndex, float32(bestSize)/1024)
+		save(dest, data)
+		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", bestQ, bestIndex, float32(bestSize)/1024)
 		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(bestSize)/float32(originalSize)*100, float32(originalSize-bestSize)/1024)
 	} else {
-		data, err := webp.EncodeRGB(original, fallbackQ)
+		data, err := webp.EncodeRGB(original, float32(fallbackQ))
 		if err != nil {
 			panic(err)
 		}
-		save("output.webp", data)
+		save(dest, data)
 		fmt.Println("* Can't find target SSIM, falling back to closest match")
-		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", int(fallbackQ), fallbackIndex, float32(fallbackSize)/1024)
+		fmt.Printf("Final image:\nQuality = %v, SSIM = %.5f, Size = %.2fKB\n", fallbackQ, fallbackIndex, float32(fallbackSize)/1024)
 		fmt.Printf("%.1f%% of original, saved %.2fKB", float32(fallbackSize)/float32(originalSize)*100, float32(originalSize-fallbackSize)/1024)
 	}
 }
