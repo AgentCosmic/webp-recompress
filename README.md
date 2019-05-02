@@ -3,4 +3,4 @@ Experimental project that tries to compress image to webp using perceptual diffe
 
 Based on SSIM code by ladinu at https://github.com/ladinu/go-ssim
 
-Results show that less savings when compared to the study done by Google.
+Results show less savings as compared to the study done by Google.
